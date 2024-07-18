@@ -1,0 +1,250 @@
+---
+title: "Code"
+author: "BHMQ3"
+date: "2023-01-03"
+output: html_document
+---
+
+Libraries
+
+```{r}
+library(tidyverse)
+library(sf)
+library(tmap)
+library(nngeo)
+library(spdep)
+library(sp)
+library(data.table)
+library(janitor)
+library(spatstat)
+library(gstat)
+library(devtools)
+install_github('mcooper/moranfast')
+library(moranfast)
+library(broom)
+library(rgeos)
+library(maptools)
+library(tmaptools)
+library(geoR)
+```
+
+Loading CSV Data
+
+```{r}
+metro <- read_csv("DELHI_METRO_DATA.csv",  show_col_types = FALSE)
+metro <- metro %>% drop_na()
+metro <-metro%>%
+  
+  st_as_sf(., coords = c("Longitude", "Latitude"), 
+           crs = 7760)
+
+rent <- read_csv("June_8_data_metro_closest_stations.csv",  show_col_types = FALSE)
+rent <- rent %>% drop_na()
+rent <- rent%>%
+  
+  st_as_sf(., coords = c("longitude", "latitude"), 
+           crs = 7760)
+```
+
+Loading Shapefiles
+
+```{r}
+wards <- st_read("Delhi_Wards-SHP/Delhi_Wards.shp", crs=7760)
+highway <- st_read("delhi_highway/delhi_highway.shp", crs=7760)
+```
+
+Maps prior to overlaying data
+
+```{r}
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5)
+
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5)
+ 
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5)
+```
+
+
+Mapping Metro locations on 3 levels
+
+```{r}
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(metro) +
+  tm_dots(col = "red")
+
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(metro) +
+  tm_dots(col = "red")
+
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(metro) +
+  tm_dots(col = "red")
+```
+
+Mapping Rent locations on 3 levels
+
+```{r}
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(rent) +
+  tm_dots(col = "gold")
+
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(rent) +
+  tm_dots(col = "gold")
+
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(rent) +
+  tm_dots(col = "gold")
+```
+
+Combined map prior to subsetting
+
+```{r}
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(rent) +
+  tm_dots(col = "gold") +
+  tm_shape(metro) +
+  tm_dots(col = "red")
+```
+
+Subsetting and new map
+
+```{r}
+metro_fil <- metro[wards,]
+rent_fil <- rent[wards,]
+```
+
+
+```{r}
+tm_shape(highway) +
+  tm_lines(col = NA, alpha = 0.5) +
+  tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(rent_fil) +
+  tm_dots(col = "gold") +
+  tm_shape(metro_fil) +
+  tm_dots(col = "red")
+```
+ Rent cost according to cost of living
+ 
+```{r}
+ in_bhk3<-rent_fil%>%
+  filter((price >  48000))
+
+out_bhk3<-rent_fil%>%
+  filter((price < 27000))
+
+in_bhk1<-rent_fil%>%
+  filter((price >  19000))
+
+out_bhk1<-rent_fil%>%
+  filter((price < 11000))
+```
+  
+```{r}
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(metro_fil) +
+  tm_dots(col = "red") +
+  tm_shape(in_bhk3) +
+  tm_dots(col = "green")
+
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(metro_fil) +
+  tm_dots(col = "red") +
+  tm_shape(in_bhk1) +
+  tm_dots(col = "pink")
+
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(metro_fil) +
+  tm_dots(col = "red") +
+  tm_shape(out_bhk3) +
+  tm_dots(col = "cyan")
+
+tm_shape(wards) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(metro_fil) +
+  tm_dots(col = "red") +
+  tm_shape(out_bhk1) +
+  tm_dots(col = "yellow")
+```
+```{r}
+metro_dist <- rent_fil[c("closest_mtero_station_km")]
+
+price <- rent_fil[c("price")]
+
+price_comp <- rent_fil[c("closest_mtero_station_km", 'price' )]
+
+```
+
+Plotting centroids from the wards file
+
+```{r}
+coordsW <- wards%>%
+  st_centroid()%>%
+  st_geometry()
+  
+plot(coordsW,axes=TRUE)
+
+LWard_nb <- wards %>%
+  poly2nb(., queen=T)
+
+plot(LWard_nb, st_geometry(coordsW), col="red")
+
+plot(wards$geometry, add=T)
+
+Lward.lw <- LWard_nb %>%
+  nb2mat(., style="B")
+
+sum(Lward.lw)
+```
+Plotting centroids using KNN
+
+```{r}
+knn_wards <-coordsW %>%
+  knearneigh(., k=4)
+
+LWard_knn <- knn_wards %>%
+  knn2nb()
+
+plot(LWard_knn, st_geometry(coordsW), col="blue")
+
+Lward.knn_4_weight <- LWard_knn %>%
+  nb2listw(., style="W")
+```
+
+Running a Moran's I test using a custom program
+
+```{r}
+dfrent <- read_csv("June_8_data_metro_closest_stations.csv", show_col_types = FALSE)
+moranfast(dfrent$closest_mtero_station_km, dfrent$longitude, dfrent$latitude, )
+```
+simple linear regression - p-value shows 10% chance of rejecting null hypothesis
+
+```{r}
+summary(linearreg <- lm(price ~ closest_mtero_station_km, data = price_comp))
+```
+poission regression
+
+```{r}
+summary(poissonreg <- glm(price ~ closest_mtero_station_km, family="poisson", data=price_comp))
+```
